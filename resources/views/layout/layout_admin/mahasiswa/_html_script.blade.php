@@ -29,6 +29,9 @@ use Illuminate\Support\Facades\Request;
                 data: 'NAMA_MAHASISWA'
             },
             {
+                data: 'NIM'
+            },
+            {
                 data: 'PRODI'
             },
             {

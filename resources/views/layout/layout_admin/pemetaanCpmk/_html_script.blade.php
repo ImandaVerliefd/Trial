@@ -205,7 +205,7 @@
 
         function resetModal() {
             $('#kode_matkul').val('').trigger('change')
-            $('#id_capaian').val('').trigger('change')
+            $('#id_capaian').empty().trigger('change'); 
             $('#id_kurikulum').val('').trigger('change')
         }
 

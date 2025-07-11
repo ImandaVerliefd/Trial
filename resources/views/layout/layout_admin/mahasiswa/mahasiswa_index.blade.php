@@ -5,7 +5,7 @@
                 <form class="d-flex">
                     <button type="button" class="btn btn-success ms-2" onclick="openModal()">
                         <i class="ri-refresh-line"></i>
-                        Syncronize
+                        Synchronize
                     </button>
                 </form>
             </div>
@@ -22,6 +22,7 @@
                     <thead>
                         <tr>
                             <th>Nama Mahasiswa</th>
+                            <th>NIM</th>
                             <th>Prodi</th>
                             <th>Jenis Kelamin</th>
                             <th>Status</th>
@@ -30,6 +31,7 @@
                     <tfoot>
                         <tr>
                             <th>Nama Mahasiswa</th>
+                            <th>NIM</th>
                             <th>Prodi</th>
                             <th>Jenis Kelamin</th>
                             <th>Status</th>

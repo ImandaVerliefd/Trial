@@ -85,12 +85,21 @@
                                                         <td>{{ $itemMhs->NRP }} <br> {{ $itemMhs->NAMA }}</td>
                                                         <td>{{ $itemMhs->PROGRAM_STUDI }}</td>
                                                         @foreach($mappingSiakad as $itemMapping)
-                                                        <td>
-                                                            <input type="hidden" name="id_siakad[{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}][{{ $itemMapping->ID_SIAKAD }}]" value="{{ $itemMapping->ID_SIAKAD }}">
-                                                            <input type="hidden" name="id_feeder[{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}][{{ $itemMapping->ID_SIAKAD }}]" value="{{ $itemMapping->ID_FEEDER }}">
-
-                                                            <input type="number" name="nilai[{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}][{{ $itemMapping->ID_SIAKAD }}]" class="form-control" id="presentase" min='0' required>
-                                                        </td>
+                                                            <?php
+                                                            $idSiakadSubCPMK = explode(';', $item->ID_SIAKAD);
+                                                            $bobotSubCPMK = explode(';', $item->BOBOT);
+                                                            $bobotValue = 0;
+                                                            $indexMapping = array_search($itemMapping->ID_SIAKAD, $idSiakadSubCPMK);
+                                                            if ($indexMapping !== false && isset($bobotSubCPMK[$indexMapping])) {
+                                                                $bobotValue = $bobotSubCPMK[$indexMapping];
+                                                            }
+                                                            ?>
+                                                            <td>
+                                                                <input type="hidden" name="id_siakad[{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}][{{ $itemMapping->ID_SIAKAD }}]" value="{{ $itemMapping->ID_SIAKAD }}">
+                                                                <input type="hidden" name="id_feeder[{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}][{{ $itemMapping->ID_SIAKAD }}]" value="{{ $itemMapping->ID_FEEDER }}">
+                                                                
+                                                                <input type="number" name="nilai[{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}][{{ $itemMapping->ID_SIAKAD }}]" class="form-control" id="presentase" min='0' value="{{ $bobotValue == 0 ? '0' : '' }}" {{ $bobotValue == 0 ? 'disabled' : 'required' }}>
+                                                            </td>
                                                         @endforeach
                                                         <td class="text-center fw-bold" id="total_nilai" data-key="{{ $itemMhs->KODE_MHS . '|' . $item->ORDERING }}">0</td>
                                                         <td class="text-center fw-bold">

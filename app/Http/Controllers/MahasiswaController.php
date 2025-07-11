@@ -23,52 +23,57 @@ class MahasiswaController extends Controller
 
     public function syncronize()
     {
-        set_time_limit(3600);
-
         try {
-            $mahasiswa = UMSApi::MasterDataMahasiswa();
-
-            if (empty($mahasiswa)) {
+            set_time_limit(3600);
+            $semester_model = Semester::whereRaw('CURDATE() BETWEEN START_SEMESTER AND END_SEMESTER')->first();
+            if (!$semester_model) {
                 return response()->json([
-                    'message' => 'No data to synchronize.'
-                ], 204);
+                    'message' => 'Synchronization failed!',
+                    'error' => 'No active semester found in the database. Please set an active semester period.'
+                ], 404);
+            }
+            $semester_aktif = $semester_model->toArray();
+
+            $allMahasiswa = UMSApi::MasterDataMahasiswa(); // Get all students first
+
+            if (empty($allMahasiswa)) {
+                return response()->json(['message' => 'No data to synchronize.'], 204);
             }
 
-            $semester_aktif = Semester::whereRaw('CURDATE() BETWEEN START_SEMESTER AND END_SEMESTER')->first()->toArray(); // Get Tahun Ajaran
+            // Process the students in chunks of 200
+            $chunks = array_chunk($allMahasiswa, 200);
 
-            DB::beginTransaction();
-            foreach ($mahasiswa as $item) {
-
-                // $semActive = ($item['TAHUN_MASUK'] % 2 == 0) ? (($semester_aktif['TAHUN'] - $item['TAHUN_MASUK']) * 2) : ((($semester_aktif['TAHUN'] - $item['TAHUN_MASUK']) * 2) - 1);
-                $semActive = (($semester_aktif['TAHUN'] - $item['TAHUN_MASUK']) * 2);
-                $status = (((int)date('Y') - $item['TAHUN_MASUK']) >= 8) ? 0 : 1;
-                $dataMahasiswa = [
-                    "KODE_MAHASISWA" => $item['ID_MAHASISWA'],
-                    "ID_USER" => $item['ID_USER'],
-                    "NIM" => $item['NIM'],
-                    "NAMA_MAHASISWA" => $item['NAMA'],
-                    "EMAIL_MAHASISWA" => $item['EMAIL'],
-                    "JENIS_KELAMIN" => $item['JENIS_KELAMIN'],
-                    "ID_PRODI" => $item['ID_PRODI'],
-                    "PRODI" => $item['PRODI'],
-                    "TAHUN_MASUK" => $item['TAHUN_MASUK'],
-                    "LOG_TIME" => date('Y-m-d H:i:s'),
-                    "IS_ACTIVE" => $status,
-                    "SEMESTER_ACTIVE" => $semActive,
-                ];
-                DB::table("md_mahasiswa")->updateOrInsert(
-                    ["KODE_MAHASISWA" => $item['ID_MAHASISWA']],
-                    $dataMahasiswa
-                );
+            foreach ($chunks as $mahasiswaChunk) {
+                DB::beginTransaction(); // Start a new transaction for each chunk
+                foreach ($mahasiswaChunk as $item) {
+                    $semActive = (($semester_aktif['TAHUN'] - $item['TAHUN_MASUK']) * 2);
+                    $status = (((int)date('Y') - $item['TAHUN_MASUK']) >= 8) ? 0 : 1;
+                    $dataMahasiswa = [
+                        "KODE_MAHASISWA" => $item['ID_MAHASISWA'],
+                        "ID_USER" => $item['ID_USER'],
+                        "NIM" => $item['NIM'],
+                        "NAMA_MAHASISWA" => $item['NAMA'],
+                        "EMAIL_MAHASISWA" => $item['EMAIL'],
+                        "JENIS_KELAMIN" => $item['JENIS_KELAMIN'],
+                        "ID_PRODI" => $item['ID_PRODI'],
+                        "PRODI" => $item['PRODI'],
+                        "TAHUN_MASUK" => $item['TAHUN_MASUK'],
+                        "LOG_TIME" => date('Y-m-d H:i:s'),
+                        "IS_ACTIVE" => $status,
+                        "SEMESTER_ACTIVE" => $semActive,
+                    ];
+                    DB::table("md_mahasiswa")->updateOrInsert(
+                        ["KODE_MAHASISWA" => $item['ID_MAHASISWA']],
+                        $dataMahasiswa
+                    );
+                }
+                DB::commit(); // Commit the transaction for the current chunk
             }
-            DB::commit();
 
-            return response()->json([
-                'message' => 'Synchronization successful!'
-            ], 200);
+            return response()->json(['message' => 'Synchronization successful!'], 200);
+
         } catch (\Exception $err) {
-            DB::rollBack();
-
+            DB::rollBack(); // Roll back the current transaction if an error occurs
             return response()->json([
                 'message' => 'Synchronization failed!',
                 'error' => $err->getMessage()
@@ -103,6 +108,7 @@ class MahasiswaController extends Controller
             ++$counter_all;
             $data = array(
                 "NAMA_MAHASISWA" => $item->NAMA_MAHASISWA,
+                "NIM" => $item->NIM,
                 "PRODI" => $item->PRODI,
                 "JENIS_KELAMIN" => $item->JENIS_KELAMIN,
                 "IS_ACTIVE" => (($item->IS_ACTIVE == 1) ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Tidak Aktif</span>'),

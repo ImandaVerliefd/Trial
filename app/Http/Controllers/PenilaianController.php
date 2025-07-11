@@ -379,6 +379,196 @@ class PenilaianController extends Controller
         }
     }
 
+    public function rekapIndex()
+    {
+        $data['title'] = "Rekap Penilaian";
+        $data['content_page'] = 'layout/layout_dosen/penilaian_rekap/index';
+        $data['script'] = 'layout/layout_dosen/penilaian_rekap/_html_script';
+        return view('templates/main', $data);
+    }
+
+    public function getAllMatkulDataForRekap(Request $req)
+    {
+        // --- Get DataTables parameters ---
+        $orderColumnIndex = $req->input('order')[0]['column'];
+        $orderColumnName = $req->input('columns')[$orderColumnIndex]['data'];
+        $orderDir = $req->input('order')[0]['dir'];
+        $searchValue = $req->input('search')['value'];
+        $start = (int)$req->input('start', 0);
+        $length = (int)$req->input('length', 10);
+        $draw   = $req->input('draw');
+
+        $kode_dosen = session('user')[0]['kode_user'];
+        $baseBindings = [$kode_dosen];
+
+        $baseSql = "
+            FROM md_matkul mm
+            JOIN tb_kelas_matkul tkm ON mm.KODE_MATKUL = tkm.KODE_MATKUL
+            JOIN mapping_peta_kurikulum mpk ON mm.KODE_MATKUL = mpk.KODE_MATKUL
+            LEFT JOIN mapping_subcpmk msc ON tkm.KODE_KELAS = msc.KODE_KELAS AND tkm.ID_DETSEM = msc.ID_DETSEM
+            WHERE mm.IS_ACTIVE = 1 AND msc.KODE_DOSEN = ?
+        ";
+
+        $totalSql = "SELECT COUNT(*) as total FROM (SELECT mm.KODE_MATKUL $baseSql GROUP BY mm.KODE_MATKUL, tkm.NAMA_KELAS) as sub";
+        $recordsTotal = DB::selectOne($totalSql, $baseBindings)->total;
+
+        $searchSql = "";
+        $searchBindings = [];
+        if (!empty($searchValue)) {
+            $searchSql = " AND (mm.NAMA_MATKUL LIKE ? OR tkm.NAMA_KELAS LIKE ?)";
+            $searchBindings = ['%' . $searchValue . '%', '%' . $searchValue . '%'];
+        }
+
+        $filteredSql = "SELECT COUNT(*) as total FROM (SELECT mm.KODE_MATKUL $baseSql $searchSql GROUP BY mm.KODE_MATKUL, tkm.NAMA_KELAS) as sub";
+        $recordsFiltered = DB::selectOne($filteredSql, array_merge($baseBindings, $searchBindings))->total;
+
+        $allowedOrderColumns = ['NAMA_MATKUL' => 'mm.NAMA_MATKUL', 'KODE_KELAS' => 'tkm.NAMA_KELAS'];
+        $orderColumn = $allowedOrderColumns[$orderColumnName] ?? 'mm.NAMA_MATKUL';
+
+        $dataSql = "
+            SELECT DISTINCT mm.NAMA_MATKUL, mm.KODE_MATKUL, tkm.NAMA_KELAS as KODE_KELAS, mpk.ID_KURIKULUM
+            $baseSql
+            $searchSql
+            ORDER BY $orderColumn $orderDir
+            LIMIT ?
+            OFFSET ?
+        ";
+
+        $dataBindings = array_merge($baseBindings, $searchBindings, [$length, $start]);
+        $data = DB::select($dataSql, $dataBindings);
+
+        $NewData_all = array();
+        foreach ($data as $item) {
+            $rowData = array(
+                "NAMA_MATKUL" => $item->NAMA_MATKUL,
+                "KODE_KELAS" => $item->KODE_KELAS,
+            );
+
+            $dataDetail = [
+                "id_kurikulum" => $item->ID_KURIKULUM,
+                "kode_matkul" => $item->KODE_MATKUL,
+            ];
+            $rowData['ACTION_BUTTON'] = '
+                <a href="'. url('rekap-penilaian/detail?data=') . Crypt::encrypt($dataDetail) .'" class="btn btn-info">
+                    <i class="ri-eye-line"></i> Detail
+                </a>
+            ';
+            $NewData_all[] = $rowData;
+        }
+
+        return response([
+            'status_code'       => 200,
+            'status_message'    => 'Data berhasil diambil!',
+            'draw'              => intval($draw),
+            'recordsFiltered'   => $recordsFiltered,
+            'recordsTotal'      => $recordsTotal,
+            'data'              => $NewData_all
+        ], 200);
+    }
+    
+    public function rekapDetailIndex(Request $req)
+    {
+        $data['title'] = "Detail Rekap Penilaian";
+    
+        $Rawdata = Crypt::decrypt($req->input('data'));
+        $kodeMatkul = $Rawdata['kode_matkul'];
+        $idKurikulum = $Rawdata['id_kurikulum'];
+    
+        $data['matkul'] = DB::table('md_matkul')->where('KODE_MATKUL', $kodeMatkul)->first();
+    
+        $allData = DB::select("
+            SELECT
+                students.KODE_MAHASISWA,
+                students.NIM,
+                students.NAMA_MAHASISWA,
+                sub_cpmks.ORDERING,
+                sub_cpmks.BOBOT_SUBCPMK,
+                penilaian.TOTAL_NILAI
+            FROM
+                (
+                    SELECT mm.KODE_MAHASISWA, mm.NIM, mm.NAMA_MAHASISWA
+                    FROM mapping_peta_kurikulum mpk
+                    JOIN tb_perwalian tp ON mpk.ID_DETSEM = tp.ID_DETSEM
+                    JOIN md_mahasiswa mm ON tp.KODE_MAHASISWA = mm.KODE_MAHASISWA
+                    WHERE mpk.KODE_MATKUL = '$kodeMatkul' AND mpk.ID_KURIKULUM = '$idKurikulum'
+                ) AS students
+            CROSS JOIN
+                (
+                    SELECT ORDERING, BOBOT_SUBCPMK
+                    FROM tb_capaian_detail
+                    WHERE KODE_MATKUL = '$kodeMatkul' AND ID_KURIKULUM = '$idKurikulum'
+                    GROUP BY ORDERING, BOBOT_SUBCPMK
+                ) AS sub_cpmks
+            LEFT JOIN
+                tb_penilaian_head AS penilaian
+                ON students.KODE_MAHASISWA = penilaian.KODE_MAHASISWA
+                AND sub_cpmks.ORDERING = penilaian.ORDERING_SUBCPMK
+                AND penilaian.KODE_MATKUL = '$kodeMatkul'
+                AND penilaian.ID_KURIKULUM = '$idKurikulum'
+            ORDER BY
+                students.NAMA_MAHASISWA, sub_cpmks.ORDERING ASC
+        ");
+    
+        $data['rekap'] = [];
+        $data['sub_cpmks'] = [];
+        $rekapMapped = [];
+        $subCpmksMapped = [];
+    
+        foreach ($allData as $row) {
+            if (!isset($subCpmksMapped[$row->ORDERING])) {
+                $subCpmksMapped[$row->ORDERING] = (object)[
+                    'ORDERING' => $row->ORDERING,
+                    'BOBOT_SUBCPMK' => $row->BOBOT_SUBCPMK,
+                ];
+            }
+    
+            if (!isset($rekapMapped[$row->KODE_MAHASISWA])) {
+                $rekapMapped[$row->KODE_MAHASISWA] = [
+                    'nim' => $row->NIM,
+                    'nama' => $row->NAMA_MAHASISWA,
+                    'nilai_subcpmk' => [],
+                    'totalTertimbang' => 0,
+                    'adaNilai' => false,
+                ];
+            }
+    
+            $nilai = $row->TOTAL_NILAI;
+            $bobot = $row->BOBOT_SUBCPMK ?? 0;
+            
+            $rekapMapped[$row->KODE_MAHASISWA]['nilai_subcpmk'][$row->ORDERING] = ($nilai !== null) ? $nilai : '';
+            if ($nilai !== null) {
+                $rekapMapped[$row->KODE_MAHASISWA]['totalTertimbang'] += (float)$nilai * ($bobot / 100);
+                $rekapMapped[$row->KODE_MAHASISWA]['adaNilai'] = true;
+            }
+        }
+
+        $data['sub_cpmks'] = array_values($subCpmksMapped);
+    
+        foreach ($rekapMapped as $rekapMhs) {
+            if ($rekapMhs['adaNilai']) {
+                $total_akhir = round($rekapMhs['totalTertimbang'], 2);
+                $rekapMhs['total_akhir'] = $total_akhir;
+                
+                if ($total_akhir >= 76) $rekapMhs['grade'] = 'A';
+                elseif ($total_akhir >= 66) $rekapMhs['grade'] = 'B';
+                elseif ($total_akhir >= 56) $rekapMhs['grade'] = 'C';
+                elseif ($total_akhir >= 41) $rekapMhs['grade'] = 'D';
+                else $rekapMhs['grade'] = 'E';
+            } else {
+                $rekapMhs['total_akhir'] = '';
+                $rekapMhs['grade'] = '';
+            }
+            
+            unset($rekapMhs['totalTertimbang'], $rekapMhs['adaNilai']);
+            $data['rekap'][] = $rekapMhs;
+        }
+    
+        $data['content_page'] = 'layout/layout_dosen/penilaian_rekap/detail_rekap_form';
+        $data['script'] = 'layout/layout_dosen/penilaian_rekap/_html_script';
+        return view('templates/main', $data);
+    }
+
+
     // STANDALONE FUNCTION    
     public function GenerateUniqChild($first, $val)
     {

@@ -242,23 +242,22 @@ class RPSController extends Controller
 
             $data['subCPMK'] = DB::select("
                 SELECT 
-                    GROUP_CONCAT(tcd.ID_CAPAIAN_DETAIL SEPARATOR ';') AS ID_CAPAIAN_DETAIL ,
-                    tcd.NAMA_PEMBELAJARAN ,
-                    tcd.ID_KURIKULUM ,
-                    tcd.KODE_MATKUL ,
-                    tcd.NAMA_PEMBELAJARAN ,
-                    GROUP_CONCAT(tcd.PERTEMUAN SEPARATOR ';') AS PERTEMUAN ,
-                    tcd.ID_SIAKAD ,
-                    tcd.BOBOT
+                    GROUP_CONCAT(tcd.ID_CAPAIAN_DETAIL SEPARATOR ';') AS ID_CAPAIAN_DETAIL,
+                    tcd.NAMA_PEMBELAJARAN,
+                    tcd.ID_KURIKULUM,
+                    tcd.KODE_MATKUL,
+                    GROUP_CONCAT(tcd.PERTEMUAN SEPARATOR ';') AS PERTEMUAN,
+                    tcd.ID_SIAKAD,
+                    tcd.BOBOT,
+                    tcd.BOBOT_SUBCPMK
                 FROM
                     tb_capaian_detail tcd 
                 WHERE 
-                    tcd.ID_KURIKULUM = '" . $data['idKurikulum'] . "'
-                    AND
-                    tcd.KODE_MATKUL = '" . $data['kodeMatkul'] . "'
+                    tcd.ID_KURIKULUM = ?
+                    AND tcd.KODE_MATKUL = ?
                 GROUP BY 
-                    tcd.KODE_CAPAIAN
-            ");
+                    tcd.ORDERING
+            ", [$data['idKurikulum'], $data['kodeMatkul']]);
         }
 
         $data['script'] = 'layout/layout_admin/rps/_html_script';
@@ -269,6 +268,7 @@ class RPSController extends Controller
     public function capaianDetailBobotSubmit(Request $req)
     {
         try {
+            DB::beginTransaction();
             $dataWhere = [
                 "kode_matkul" => $req->input('kode-matkul'),
                 "id_kurikulum" => $req->input('id-kurikulum')
@@ -279,6 +279,7 @@ class RPSController extends Controller
                     'ID_SIAKAD' => implode(';', $req->input('id_siakad')[$key]),
                     'BOBOT' => implode(';', $req->input('bobot')[$key]),
                     'TOTAL_BOBOT' => array_sum($req->input('bobot')[$key]),
+                    'BOBOT_SUBCPMK' => $req->input('bobot_subcpmk')[$key],
                     'LOG_TIME' => date('Y-m-d H:i:s')
                 ];
                 DB::table('tb_capaian_detail')->whereIn('ID_CAPAIAN_DETAIL', explode(';', $id_capaian_detail))->update($data);

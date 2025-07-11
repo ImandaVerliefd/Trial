@@ -16,6 +16,25 @@ use Illuminate\Support\Facades\Request;
 
     var detailCapaian = '<?= !empty($detailCapaian) ? json_encode($detailCapaian) : '' ?>'
     var dataCapSecond = '<?= !empty($dataCapSecond) ? json_encode($dataCapSecond) : '' ?>'
+    
+    // ADDED: Fungsi untuk menghitung dan memperbarui total bobot Sub-CPMK
+    function updateTotalBobotSubCPMK() {
+        var total = 0;
+        $('input.bobot-subcpmk-input').each(function() {
+            total += parseFloat($(this).val()) || 0;
+        });
+        
+        // Memperbarui teks total
+        $('#total-bobot-subcpmk').text(total.toFixed(2) + '%');
+        
+        // Memberi warna hijau jika total 100, selain itu merah
+        if (total === 100) {
+            $('#total-bobot-subcpmk').css('color', 'green');
+        } else {
+            $('#total-bobot-subcpmk').css('color', 'red');
+        }
+    }
+
 
     $(document).ready(function() {
         <?= (Request::is('rps*')) ? "$('#MappingPages').collapse('show')" : ''; ?>
@@ -39,6 +58,14 @@ use Illuminate\Support\Facades\Request;
         if (detailCapaian) {
             addExistingDataDetailCapaian(detailCapaian, dataCapSecond)
         }
+        
+        // ADDED: Panggil fungsi kalkulasi saat halaman dimuat
+        updateTotalBobotSubCPMK();
+
+        // ADDED: Event listener untuk menghitung ulang saat ada perubahan pada input
+        $('.card-body').on('input', '.bobot-subcpmk-input', function() {
+            updateTotalBobotSubCPMK();
+        });
     });
 </script>
 
@@ -262,6 +289,7 @@ use Illuminate\Support\Facades\Request;
     }
 
     <?php if (!empty($subCPMK)) : ?>
+        // UPDATED: Fungsi validasi dan submit form bobot penilaian
         function submitFormBobotPenilaian() {
             var isValid = true;
             var form = $('#form-bobot-rps')[0];
@@ -272,7 +300,7 @@ use Illuminate\Support\Facades\Request;
             }
 
             if (isValid) {
-                total = 0
+                var total = 0;
                 <?php foreach ($subCPMK as $key => $item) : ?>
                     $('input[name="bobot[<?= $key ?>][]"]').each(function() {
                         var value = parseFloat($(this).val()) || 0;
@@ -280,21 +308,31 @@ use Illuminate\Support\Facades\Request;
                     });
                 <?php endforeach; ?>
 
-                if (total == 100) {
-                    Swal.fire({
-                        title: "Saving...",
-                        html: "Please wait, the system is still saving...",
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
+                var totalBobotSubcpmk = 0;
+                $('input[name^="bobot_subcpmk"]').each(function() {
+                    totalBobotSubcpmk += parseFloat($(this).val()) || 0;
+                });
+
+                if (total > 100) {
+                    Toast.fire({
+                        icon: "error",
+                        title: "Bobot penilaian tidak boleh melebihi nilai 100!"
                     });
-                    $('#form-bobot-rps').submit()
-                } else if (total < 100) {
+                    return;
+                }
+                
+                if (totalBobotSubcpmk > 100) {
+                    Toast.fire({
+                        icon: "error",
+                        title: "Total bobot Sub-CPMK tidak boleh melebihi 100%!"
+                    });
+                    return;
+                }
+
+                if (total < 100 || totalBobotSubcpmk < 100) {
                     swalWithBootstrapButtons.fire({
                         title: `Apakah anda yakin ingin menyimpan bobot penilaian ?`,
-                        text: `Peringatan, total bobot penilaian saat ini kurang dari 100!`,
+                        text: `Peringatan, total bobot penilaian atau bobot Sub-CPMK kurang dari 100!`,
                         icon: "warning",
                         showCancelButton: true,
                         confirmButtonText: "Ya",
@@ -314,11 +352,17 @@ use Illuminate\Support\Facades\Request;
                             $('#form-bobot-rps').submit()
                         }
                     });
-                } else {
-                    Toast.fire({
-                        icon: "error",
-                        title: "Bobot penilaian tidak boleh melebihi nilai 100!"
+                } else { // Both are 100
+                    Swal.fire({
+                        title: "Saving...",
+                        html: "Please wait, the system is still saving...",
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
                     });
+                    $('#form-bobot-rps').submit()
                 }
             }
         }

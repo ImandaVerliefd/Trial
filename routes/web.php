@@ -152,6 +152,10 @@ Route::middleware(['usersession:1,2'])->group(function () {
     Route::post('/penilaian/form/detail', 'PenilaianController@penilaianDetailIndex');
     Route::post('/penilaian/submit', 'PenilaianController@penilaianDetailSubmit');
     Route::post('/penilaian/submit-per-row', 'PenilaianController@penilaianDetailSubmitPerRow');
+
+    Route::get('/rekap-penilaian', 'PenilaianController@rekapIndex');
+    Route::post('/rekap-penilaian/get-all-matkul', 'PenilaianController@getAllMatkulDataForRekap');
+    Route::get('/rekap-penilaian/detail', 'PenilaianController@rekapDetailIndex');
 });
 
 Route::middleware(['usersession:2'])->group(callback: function () {
